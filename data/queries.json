@@ -1,0 +1,20 @@
+[
+  {
+    "prompt": "Companies that recently announced or publicly stated they use Zoho CRM, Zoho One, Zoho Books, or other Zoho products.",
+    "enabled": true,
+    "id": "2a06eab6-6b66-4a79-809d-cdb7d0aacb26",
+    "createdAt": "2026-06-08T07:16:20.605Z"
+  },
+  {
+    "prompt": "Businesses publishing a request, RFP, or call for proposals for Zoho implementation, consulting, customization, or migration services.",
+    "enabled": true,
+    "id": "bf33d0a0-58d6-415a-a52c-8df0bafbd50f",
+    "createdAt": "2026-06-08T07:16:20.606Z"
+  },
+  {
+    "prompt": "Companies announcing a migration to Zoho from another platform (e.g. Salesforce, HubSpot, QuickBooks) in news, blogs, or social media.",
+    "enabled": true,
+    "id": "5a2b3089-431d-4d12-9a10-f5fe6be948e0",
+    "createdAt": "2026-06-08T07:16:20.606Z"
+  }
+]
