@@ -3,53 +3,48 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import type { SearchQuery } from "@/lib/types";
+import {
+  addCustomQuery,
+  removeCustomQuery,
+  toggleQuery,
+  type EffectiveQuery,
+} from "@/lib/queries-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
 // Collapsible panel for managing the monitoring queries the agent runs.
+// Default queries come from the server (read-only, but can be switched off);
+// custom queries the user adds are stored in localStorage.
 export function QueriesPanel({
   queries,
   onChange,
 }: {
-  queries: SearchQuery[];
-  onChange: () => void | Promise<void>;
+  queries: EffectiveQuery[];
+  onChange: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [newPrompt, setNewPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
 
   const enabledCount = queries.filter((q) => q.enabled).length;
 
-  async function add() {
+  function add() {
     const prompt = newPrompt.trim();
     if (!prompt) return;
-    setBusy(true);
-    await fetch("/api/queries", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
-    });
+    addCustomQuery(prompt);
     setNewPrompt("");
-    setBusy(false);
-    await onChange();
+    onChange();
   }
 
-  async function toggle(q: SearchQuery) {
-    await fetch("/api/queries", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: q.id, enabled: !q.enabled }),
-    });
-    await onChange();
+  function toggle(q: EffectiveQuery) {
+    toggleQuery(q);
+    onChange();
   }
 
-  async function remove(id: string) {
-    await fetch(`/api/queries?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-    await onChange();
+  function remove(id: string) {
+    removeCustomQuery(id);
+    onChange();
   }
 
   return (
@@ -101,15 +96,21 @@ export function QueriesPanel({
                     >
                       {q.prompt}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => remove(q.id)}
-                      className="text-destructive hover:text-destructive"
-                      aria-label="Remove query"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {q.isDefault ? (
+                      <Badge variant="muted" className="mt-0.5 shrink-0">
+                        default
+                      </Badge>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => remove(q.id)}
+                        className="text-destructive hover:text-destructive"
+                        aria-label="Remove query"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -124,11 +125,15 @@ export function QueriesPanel({
                 <Button
                   variant="secondary"
                   onClick={add}
-                  disabled={busy || !newPrompt.trim()}
+                  disabled={!newPrompt.trim()}
                 >
                   <Plus /> Add
                 </Button>
               </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Default queries load from the server; queries you add are saved
+                in this browser.
+              </p>
             </div>
           </motion.div>
         )}

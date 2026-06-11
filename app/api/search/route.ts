@@ -24,14 +24,36 @@ function parseRange(input: unknown): TimeRange {
   return { preset, from: r.from, to: r.to };
 }
 
+// Accept the enabled query prompts supplied by the client (strings, or
+// { prompt } objects). Returns undefined so the agent falls back to server
+// defaults when nothing usable is provided.
+function parseQueries(input: unknown): string[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const prompts = input
+    .map((q) =>
+      typeof q === "string"
+        ? q
+        : q && typeof q === "object" && typeof (q as { prompt?: unknown }).prompt === "string"
+          ? (q as { prompt: string }).prompt
+          : "",
+    )
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return prompts.length ? prompts : undefined;
+}
+
 // POST /api/search -> run the monitoring agent across all enabled queries.
 // body: { timeRange?: { preset, from?, to? } }
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
       timeRange?: unknown;
+      queries?: unknown;
     };
-    const result = await runMonitoring(parseRange(body.timeRange));
+    const result = await runMonitoring(
+      parseRange(body.timeRange),
+      parseQueries(body.queries),
+    );
     return Response.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

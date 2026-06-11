@@ -93,6 +93,8 @@ export interface RunResult {
   finishedAt: string;
   queriesRun: number;
   found: number; // total candidates returned by the model
-  added: number; // new (deduped) leads stored
   errors: string[];
+  /** Discovered leads (filtered + deduped within this run). The client merges
+   * these into its localStorage store and decides which are actually new. */
+  leads: Lead[];
 }

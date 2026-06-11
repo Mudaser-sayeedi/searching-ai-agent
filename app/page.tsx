@@ -1,19 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, ExternalLink, Loader2, RefreshCw, Search } from "lucide-react";
+import {
+  Download,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import {
   SIGNAL_LABELS,
   SIGNAL_TYPES,
   TIME_PRESET_LABELS,
   type Lead,
-  type RunResult,
   type SearchQuery,
   type SignalType,
   type TimePreset,
   type TimeRange,
 } from "@/lib/types";
+import {
+  clearLeads,
+  downloadLeadsCsv,
+  loadLeads,
+  mergeLeads,
+  saveLeads,
+} from "@/lib/leads-client";
+import {
+  getEffectiveQueries,
+  type EffectiveQuery,
+} from "@/lib/queries-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -42,10 +59,13 @@ const TIME_PRESETS: TimePreset[] = [
 
 export default function Home() {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [queries, setQueries] = useState<SearchQuery[]>([]);
+  const [queries, setQueries] = useState<EffectiveQuery[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [lastRun, setLastRun] = useState<RunResult | null>(null);
+  const [runSummary, setRunSummary] = useState<{
+    found: number;
+    added: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Recency window for the next search run (default: today).
@@ -58,28 +78,44 @@ export default function Home() {
   const [typeFilter, setTypeFilter] = useState<SignalType | "all">("all");
   const [search, setSearch] = useState("");
 
-  const loadLeads = useCallback(async () => {
-    const res = await fetch("/api/leads");
-    const data = await res.json();
-    setLeads(data.leads ?? []);
+  // Always-current views so callbacks read the latest without re-binding.
+  const leadsRef = useRef<Lead[]>([]);
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
+  const queriesRef = useRef<EffectiveQuery[]>([]);
+  useEffect(() => {
+    queriesRef.current = queries;
+  }, [queries]);
+
+  // Server default queries (read-only); the effective list combines these with
+  // the user's custom queries + on/off overrides from localStorage.
+  const defaultsRef = useRef<SearchQuery[]>([]);
+
+  // Recompute the effective query list from cached defaults + localStorage.
+  const refreshQueries = useCallback(() => {
+    setQueries(getEffectiveQueries(defaultsRef.current));
   }, []);
 
   const loadQueries = useCallback(async () => {
     const res = await fetch("/api/queries");
     const data = await res.json();
-    setQueries(data.queries ?? []);
+    defaultsRef.current = data.queries ?? [];
+    setQueries(getEffectiveQueries(defaultsRef.current));
   }, []);
 
   useEffect(() => {
+    // Leads + custom queries live in the browser (localStorage); default
+    // queries come from the server.
+    setLeads(loadLeads());
     let active = true;
-    (async () => {
-      await Promise.all([loadLeads(), loadQueries()]);
+    loadQueries().finally(() => {
       if (active) setLoading(false);
-    })();
+    });
     return () => {
       active = false;
     };
-  }, [loadLeads, loadQueries]);
+  }, [loadQueries]);
 
   const runSearch = useCallback(async () => {
     setRunning(true);
@@ -89,35 +125,55 @@ export default function Home() {
       from: preset === "custom" ? customFrom || undefined : undefined,
       to: preset === "custom" ? customTo || undefined : undefined,
     };
+    const queries = queriesRef.current
+      .filter((q) => q.enabled)
+      .map((q) => q.prompt);
+    if (queries.length === 0) {
+      setError("No active queries. Enable or add at least one query to search.");
+      setRunning(false);
+      return;
+    }
     try {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ timeRange }),
+        body: JSON.stringify({ timeRange, queries }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Search failed");
-      setLastRun(data as RunResult);
+
+      const incoming: Lead[] = data.leads ?? [];
+      const { merged, added } = mergeLeads(leadsRef.current, incoming);
+      setLeads(merged);
+      saveLeads(merged);
+      setRunSummary({ found: data.found ?? incoming.length, added });
       if (data.errors?.length) setError(data.errors.join(" | "));
-      await loadLeads();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRunning(false);
     }
-  }, [preset, customFrom, customTo, loadLeads]);
+  }, [preset, customFrom, customTo]);
 
-  const setLeadStatus = useCallback(
-    async (id: string, status: Lead["status"]) => {
-      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
-      await fetch("/api/leads", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
-      });
-    },
-    [],
-  );
+  const setLeadStatus = useCallback((id: string, status: Lead["status"]) => {
+    const next = leadsRef.current.map((l) =>
+      l.id === id ? { ...l, status } : l,
+    );
+    setLeads(next);
+    saveLeads(next);
+  }, []);
+
+  const clearAll = useCallback(() => {
+    if (
+      !window.confirm(
+        "Clear all saved leads from this browser? This cannot be undone.",
+      )
+    )
+      return;
+    clearLeads();
+    setLeads([]);
+    setRunSummary(null);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -150,21 +206,32 @@ export default function Home() {
             Zoho Signal Monitor
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {counts.total} leads · {counts.new} new
-            {lastRun && (
+            {counts.total} leads · {counts.new} new · saved in this browser
+            {runSummary && (
               <>
                 {" · last run added "}
-                <strong className="text-foreground">{lastRun.added}</strong>
-                {` of ${lastRun.found} found`}
+                <strong className="text-foreground">{runSummary.added}</strong>
+                {` of ${runSummary.found} found`}
               </>
             )}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href="/api/export" download>
-              <Download /> Export CSV
-            </a>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => downloadLeadsCsv(leads)}
+            disabled={leads.length === 0}
+          >
+            <Download /> Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={clearAll}
+            disabled={leads.length === 0}
+          >
+            <Trash2 /> Clear
           </Button>
           <ThemeToggle />
         </div>
@@ -256,7 +323,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <QueriesPanel queries={queries} onChange={loadQueries} />
+      <QueriesPanel queries={queries} onChange={refreshQueries} />
 
       {/* Filters */}
       <div className="mb-4 mt-6 flex flex-wrap items-center gap-2">
