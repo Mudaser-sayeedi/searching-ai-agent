@@ -1,0 +1,63 @@
+import { runMonitoring } from "@/lib/agent";
+import type { TimePreset, TimeRange } from "@/lib/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+// A full run can take a while (one grounded call per query).
+export const maxDuration = 300;
+
+const VALID_PRESETS: TimePreset[] = [
+  "today",
+  "yesterday",
+  "week",
+  "month",
+  "year",
+  "any",
+  "custom",
+];
+
+function parseRange(input: unknown): TimeRange {
+  const r = (input ?? {}) as Partial<TimeRange>;
+  const preset = VALID_PRESETS.includes(r.preset as TimePreset)
+    ? (r.preset as TimePreset)
+    : "today";
+  return { preset, from: r.from, to: r.to };
+}
+
+// POST /api/search -> run the monitoring agent across all enabled queries.
+// body: { timeRange?: { preset, from?, to? } }
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      timeRange?: unknown;
+    };
+    const result = await runMonitoring(parseRange(body.timeRange));
+    return Response.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+// GET /api/search -> same run, intended for scheduled triggers (cron).
+// Protect it by setting CRON_SECRET and calling /api/search?secret=...&preset=today
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const secret = process.env.CRON_SECRET;
+  if (secret && url.searchParams.get("secret") !== secret) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+  try {
+    const result = await runMonitoring(
+      parseRange({
+        preset: url.searchParams.get("preset") ?? "today",
+        from: url.searchParams.get("from") ?? undefined,
+        to: url.searchParams.get("to") ?? undefined,
+      }),
+    );
+    return Response.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
