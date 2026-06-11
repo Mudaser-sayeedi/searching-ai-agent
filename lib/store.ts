@@ -27,26 +27,29 @@ async function writeJson(file: string, data: unknown): Promise<void> {
   await fs.rename(tmp, file);
 }
 
-/** Default queries seeded on first run so the tool is useful out of the box. */
+/**
+ * Default queries seeded on first run. These target BUYING INTENT — companies
+ * that need a Zoho partner — not companies that already use Zoho.
+ */
 const DEFAULT_QUERIES: Omit<SearchQuery, "id" | "createdAt">[] = [
   {
     prompt:
-      "Companies that recently announced or publicly stated they use Zoho CRM, Zoho One, Zoho Books, or other Zoho products.",
+      "Businesses publicly looking for a Zoho partner, consultant, developer, or agency to implement, customize, or migrate to Zoho. Include posts like 'looking for a Zoho expert' or 'need help setting up Zoho CRM'.",
     enabled: true,
   },
   {
     prompt:
-      "Businesses publishing a request, RFP, or call for proposals seeking a Zoho implementation / consulting / customization / migration partner or agency.",
+      "Open RFPs, RFQs, tenders, or requests for proposals where an organization is seeking Zoho CRM / Zoho One / Zoho Books / Zoho Creator implementation or migration services.",
     enabled: true,
   },
   {
     prompt:
-      "Companies announcing a migration to Zoho from another platform (e.g. Salesforce, HubSpot, QuickBooks) in news, blogs, or social media.",
+      "People asking for advice or recommendations about adopting or moving to Zoho on forums, Reddit, Quora, or LinkedIn (e.g. 'should we switch to Zoho', 'is Zoho One worth it for our company', 'how to migrate to Zoho').",
     enabled: true,
   },
   {
     prompt:
-      "Companies that mention using Zoho products in case studies, press releases, or LinkedIn posts (the organization itself, not recruiters).",
+      "Companies expressing frustration with their current CRM/accounting/helpdesk tool and considering Zoho as an alternative, or planning to evaluate Zoho.",
     enabled: true,
   },
 ];

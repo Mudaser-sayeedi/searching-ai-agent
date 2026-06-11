@@ -1,27 +1,40 @@
 // Shared domain types for the Zoho monitoring agent.
 
 /** The kind of signal a lead represents. */
+// A lead is a company with BUYING INTENT for Zoho services — it needs help and
+// has not implemented yet. These categories describe the kind of need expressed.
 export type SignalType =
-  | "uses_zoho" // company states/announces they use a Zoho product
-  | "requesting_services" // RFP / asking for Zoho implementation, consulting, migration help
-  | "migration" // moving to (or away from) Zoho
-  | "review_or_mention" // public review, news, or general mention
-  | "other";
+  | "seeking_partner" // looking for a Zoho partner / consultant / developer
+  | "rfp" // formal RFP / tender / request for proposal for Zoho work
+  | "evaluating" // considering / comparing Zoho before adopting
+  | "needs_help" // wants to adopt or is stuck and asking for help/guidance
+  | "other"; // some other genuine intent signal
 
 export const SIGNAL_TYPES: SignalType[] = [
-  "uses_zoho",
-  "requesting_services",
-  "migration",
-  "review_or_mention",
+  "seeking_partner",
+  "rfp",
+  "evaluating",
+  "needs_help",
   "other",
 ];
 
 export const SIGNAL_LABELS: Record<SignalType, string> = {
-  uses_zoho: "Uses Zoho",
-  requesting_services: "Requesting services",
-  migration: "Migration",
-  review_or_mention: "Review / mention",
+  seeking_partner: "Seeking Zoho partner",
+  rfp: "RFP / tender",
+  evaluating: "Evaluating Zoho",
+  needs_help: "Needs help",
   other: "Other",
+};
+
+/** Region to scope the lead search to. */
+export type Country = "czech" | "slovakia" | "international";
+
+export const COUNTRIES: Country[] = ["czech", "slovakia", "international"];
+
+export const COUNTRY_LABELS: Record<Country, string> = {
+  czech: "Czech Republic",
+  slovakia: "Slovakia",
+  international: "International",
 };
 
 /** Preset windows for how recent a result must be. */

@@ -11,9 +11,12 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  COUNTRIES,
+  COUNTRY_LABELS,
   SIGNAL_LABELS,
   SIGNAL_TYPES,
   TIME_PRESET_LABELS,
+  type Country,
   type Lead,
   type SearchQuery,
   type SignalType,
@@ -72,6 +75,9 @@ export default function Home() {
   const [preset, setPreset] = useState<TimePreset>("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+
+  // Region to scope the search to (default: Czech Republic).
+  const [country, setCountry] = useState<Country>("international");
 
   // Filters applied to the stored leads list.
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -137,7 +143,7 @@ export default function Home() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ timeRange, queries }),
+        body: JSON.stringify({ timeRange, queries, country }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Search failed");
@@ -153,7 +159,7 @@ export default function Home() {
     } finally {
       setRunning(false);
     }
-  }, [preset, customFrom, customTo]);
+  }, [preset, customFrom, customTo, country]);
 
   const setLeadStatus = useCallback((id: string, status: Lead["status"]) => {
     const next = leadsRef.current.map((l) =>
@@ -240,6 +246,26 @@ export default function Home() {
       {/* Search control bar */}
       <Card className="mb-4">
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Region
+            </label>
+            <Select
+              value={country}
+              onValueChange={(v) => setCountry(v as Country)}
+            >
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COUNTRIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {COUNTRY_LABELS[c]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex-1">
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Show posts from
@@ -414,7 +440,7 @@ function LeadCard({
             <span className="font-medium">
               {lead.company || "Unknown company"}
             </span>
-            <Badge>{SIGNAL_LABELS[lead.signalType]}</Badge>
+            <Badge>{SIGNAL_LABELS[lead.signalType] ?? lead.signalType}</Badge>
             {lead.status === "new" && <Badge variant="success">new</Badge>}
             <span className="ml-auto text-xs text-muted-foreground">
               {Math.round(lead.confidence * 100)}% confidence

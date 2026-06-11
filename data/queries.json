@@ -1,26 +1,26 @@
 [
   {
-    "prompt": "Companies that recently announced or publicly stated they use Zoho CRM, Zoho One, Zoho Books, or other Zoho products.",
+    "prompt": "Businesses publicly looking for a Zoho partner, consultant, developer, or agency to implement, customize, or migrate to Zoho. Include posts like 'looking for a Zoho expert' or 'need help setting up Zoho CRM'.",
     "enabled": true,
-    "id": "ac0a4984-8af9-4a07-98ef-81286fad5b64",
-    "createdAt": "2026-06-11T09:17:01.084Z"
+    "id": "9ceb460a-a260-4188-96e9-c08e0ce021e2",
+    "createdAt": "2026-06-11T09:37:08.650Z"
   },
   {
-    "prompt": "Businesses publishing a request, RFP, or call for proposals seeking a Zoho implementation / consulting / customization / migration partner or agency.",
+    "prompt": "Open RFPs, RFQs, tenders, or requests for proposals where an organization is seeking Zoho CRM / Zoho One / Zoho Books / Zoho Creator implementation or migration services.",
     "enabled": true,
-    "id": "323ea788-e56c-4c21-94a9-159075bc7def",
-    "createdAt": "2026-06-11T09:17:01.084Z"
+    "id": "603de2bb-e6cd-4801-b467-0895a3cf65dc",
+    "createdAt": "2026-06-11T09:37:08.650Z"
   },
   {
-    "prompt": "Companies announcing a migration to Zoho from another platform (e.g. Salesforce, HubSpot, QuickBooks) in news, blogs, or social media.",
+    "prompt": "People asking for advice or recommendations about adopting or moving to Zoho on forums, Reddit, Quora, or LinkedIn (e.g. 'should we switch to Zoho', 'is Zoho One worth it for our company', 'how to migrate to Zoho').",
     "enabled": true,
-    "id": "de4be6e4-43b5-418b-a9b7-34f09e404e10",
-    "createdAt": "2026-06-11T09:17:01.084Z"
+    "id": "7411004d-af93-4dee-a2d6-b06a4fa83a7b",
+    "createdAt": "2026-06-11T09:37:08.650Z"
   },
   {
-    "prompt": "Companies that mention using Zoho products in case studies, press releases, or LinkedIn posts (the organization itself, not recruiters).",
+    "prompt": "Companies expressing frustration with their current CRM/accounting/helpdesk tool and considering Zoho as an alternative, or planning to evaluate Zoho.",
     "enabled": true,
-    "id": "8a84a5bc-ca31-49f5-918b-97f972e4d8e4",
-    "createdAt": "2026-06-11T09:17:01.084Z"
+    "id": "d41b13cb-a8cf-4503-8f56-7aa6978d61e7",
+    "createdAt": "2026-06-11T09:37:08.650Z"
   }
 ]

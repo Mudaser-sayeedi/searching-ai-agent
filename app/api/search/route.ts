@@ -1,5 +1,5 @@
 import { runMonitoring } from "@/lib/agent";
-import type { TimePreset, TimeRange } from "@/lib/types";
+import { COUNTRIES, type Country, type TimePreset, type TimeRange } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +22,10 @@ function parseRange(input: unknown): TimeRange {
     ? (r.preset as TimePreset)
     : "today";
   return { preset, from: r.from, to: r.to };
+}
+
+function parseCountry(input: unknown): Country {
+  return COUNTRIES.includes(input as Country) ? (input as Country) : "czech";
 }
 
 // Accept the enabled query prompts supplied by the client (strings, or
@@ -49,10 +53,12 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       timeRange?: unknown;
       queries?: unknown;
+      country?: unknown;
     };
     const result = await runMonitoring(
       parseRange(body.timeRange),
       parseQueries(body.queries),
+      parseCountry(body.country),
     );
     return Response.json(result);
   } catch (err) {
@@ -76,6 +82,8 @@ export async function GET(request: Request) {
         from: url.searchParams.get("from") ?? undefined,
         to: url.searchParams.get("to") ?? undefined,
       }),
+      undefined,
+      parseCountry(url.searchParams.get("country")),
     );
     return Response.json(result);
   } catch (err) {
