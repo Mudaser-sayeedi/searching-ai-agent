@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local data store (JSON files)
 # /data
+
+# scraped catalog cache (re-fetched on demand)
+/data/vizitka-catalog.json

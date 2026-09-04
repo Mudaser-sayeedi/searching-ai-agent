@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  BookUser,
+  CheckCircle2,
   Download,
   ExternalLink,
   Loader2,
   RefreshCw,
   Search,
+  Sparkles,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 import {
   COUNTRIES,
@@ -45,10 +49,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { crmLeadUrl, type CrmLinks } from "@/lib/crm-client";
+import { paginate } from "@/lib/paginate";
+import { Pagination } from "@/components/ui/pagination";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { QueriesPanel } from "./QueriesPanel";
+import { CatalogPanel } from "./CatalogPanel";
+import { useCrm } from "./useCrm";
 
 type StatusFilter = "all" | Lead["status"];
+
+/** Which data source the dashboard is showing. */
+type Tab = "search" | "catalog";
+
+/** Leads per page. */
+const PAGE_SIZE = 10;
 
 const TIME_PRESETS: TimePreset[] = [
   "today",
@@ -61,6 +76,11 @@ const TIME_PRESETS: TimePreset[] = [
 ];
 
 export default function Home() {
+  const [tab, setTab] = useState<Tab>("search");
+  // Zoho CRM state is shared by both tabs, so something pushed from one shows
+  // as "In CRM" in the other.
+  const crm = useCrm();
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [queries, setQueries] = useState<EffectiveQuery[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +103,10 @@ export default function Home() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<SignalType | "all">("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  /** Top of the leads list, so paging keeps the first row in view. */
+  const listTopRef = useRef<HTMLDivElement>(null);
 
   // Always-current views so callbacks read the latest without re-binding.
   const leadsRef = useRef<Lead[]>([]);
@@ -122,6 +146,18 @@ export default function Home() {
       active = false;
     };
   }, [loadQueries]);
+
+  // Reconcile stored leads against Zoho CRM, so a lead pushed in an earlier
+  // session is still shown as "In CRM" here (and never pushed twice).
+  const { status: crmStatus, check: crmCheck } = crm;
+  const checkedLeadsRef = useRef("");
+  useEffect(() => {
+    if (!crmStatus?.configured || leads.length === 0) return;
+    const signature = leads.map((l) => l.id).join(",");
+    if (checkedLeadsRef.current === signature) return;
+    checkedLeadsRef.current = signature;
+    crmCheck(leads.map((l) => ({ id: l.id, company: l.company })));
+  }, [leads, crmStatus?.configured, crmCheck]);
 
   const runSearch = useCallback(async () => {
     setRunning(true);
@@ -195,6 +231,16 @@ export default function Home() {
     });
   }, [leads, statusFilter, typeFilter, search]);
 
+  const pageData = useMemo(
+    () => paginate(filtered, page, PAGE_SIZE),
+    [filtered, page],
+  );
+
+  const goToPage = useCallback((next: number) => {
+    setPage(next);
+    listTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const counts = useMemo(
     () => ({
       total: leads.length,
@@ -212,220 +258,341 @@ export default function Home() {
             Zoho Signal Monitor
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {counts.total} leads · {counts.new} new · saved in this browser
-            {runSummary && (
+            {tab === "search" ? (
               <>
-                {" · last run added "}
-                <strong className="text-foreground">{runSummary.added}</strong>
-                {` of ${runSummary.found} found`}
+                {counts.total} leads · {counts.new} new · saved in this browser
+                {runSummary && (
+                  <>
+                    {" · last run added "}
+                    <strong className="text-foreground">
+                      {runSummary.added}
+                    </strong>
+                    {` of ${runSummary.found} found`}
+                  </>
+                )}
               </>
+            ) : (
+              "Business profiles from the Vizitka.ai catalog, ready to push into Zoho CRM"
             )}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => downloadLeadsCsv(leads)}
-            disabled={leads.length === 0}
-          >
-            <Download /> Export CSV
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearAll}
-            disabled={leads.length === 0}
-          >
-            <Trash2 /> Clear
-          </Button>
+          {tab === "search" && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadLeadsCsv(leads)}
+                disabled={leads.length === 0}
+              >
+                <Download /> Export CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearAll}
+                disabled={leads.length === 0}
+              >
+                <Trash2 /> Clear
+              </Button>
+            </>
+          )}
           <ThemeToggle />
         </div>
       </header>
 
-      {/* Search control bar */}
-      <Card className="mb-4">
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Region
-            </label>
-            <Select
-              value={country}
-              onValueChange={(v) => setCountry(v as Country)}
-            >
-              <SelectTrigger className="w-full sm:w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {COUNTRIES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {COUNTRY_LABELS[c]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1">
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Show posts from
-            </label>
-            <Select
-              value={preset}
-              onValueChange={(v) => setPreset(v as TimePreset)}
-            >
-              <SelectTrigger className="w-full sm:w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIME_PRESETS.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {TIME_PRESET_LABELS[p]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Source tabs */}
+      <div className="mb-4 inline-flex gap-1 rounded-lg border bg-muted/40 p-1">
+        <TabButton active={tab === "search"} onClick={() => setTab("search")}>
+          <Sparkles className="h-4 w-4" /> Web search
+        </TabButton>
+        <TabButton active={tab === "catalog"} onClick={() => setTab("catalog")}>
+          <BookUser className="h-4 w-4" /> Vizitka.ai catalog
+        </TabButton>
+      </div>
 
-          <AnimatePresence initial={false}>
-            {preset === "custom" && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="flex items-end gap-2 overflow-hidden"
-              >
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                    From
-                  </label>
-                  <Input
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="w-40"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                    To
-                  </label>
-                  <Input
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="w-40"
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <Button onClick={runSearch} disabled={running} className="sm:ml-auto">
-            {running ? (
-              <>
-                <Loader2 className="animate-spin" /> Searching the web…
-              </>
-            ) : (
-              <>
-                <RefreshCw /> Run search now
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Errors */}
+      {/* Anything that went wrong talking to Zoho, on either tab */}
       <AnimatePresence>
-        {error && (
+        {crm.error && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            className="mb-4 flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           >
-            {error}
+            <span className="flex-1">{crm.error}</span>
+            <button
+              onClick={crm.clearError}
+              className="shrink-0 underline underline-offset-2"
+            >
+              dismiss
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <QueriesPanel queries={queries} onChange={refreshQueries} />
-
-      {/* Filters */}
-      <div className="mb-4 mt-6 flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-50">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search company, product, text…"
-            className="pl-9"
-          />
-        </div>
-        <Select
-          value={typeFilter}
-          onValueChange={(v) => setTypeFilter(v as SignalType | "all")}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All signal types</SelectItem>
-            {SIGNAL_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>
-                {SIGNAL_LABELS[t]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="new">New</SelectItem>
-            <SelectItem value="reviewed">Reviewed</SelectItem>
-            <SelectItem value="dismissed">Dismissed</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Leads */}
-      {loading ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Loading…
-        </p>
-      ) : filtered.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          {leads.length === 0
-            ? 'No leads yet. Pick a time window and click "Run search now".'
-            : "No leads match your filters."}
-        </p>
+      {tab === "catalog" ? (
+        <CatalogPanel crm={crm} />
       ) : (
-        <ul className="flex flex-col gap-3">
-          <AnimatePresence initial={false}>
-            {filtered.map((lead) => (
-              <LeadCard key={lead.id} lead={lead} onStatus={setLeadStatus} />
-            ))}
+        <>
+          {/* Search control bar */}
+          <Card className="mb-4">
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Region
+                </label>
+                <Select
+                  value={country}
+                  onValueChange={(v) => setCountry(v as Country)}
+                >
+                  <SelectTrigger className="w-full sm:w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {COUNTRY_LABELS[c]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Show posts from
+                </label>
+                <Select
+                  value={preset}
+                  onValueChange={(v) => setPreset(v as TimePreset)}
+                >
+                  <SelectTrigger className="w-full sm:w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIME_PRESETS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {TIME_PRESET_LABELS[p]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <AnimatePresence initial={false}>
+                {preset === "custom" && (
+                  <motion.div
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: "auto" }}
+                    exit={{ opacity: 0, width: 0 }}
+                    className="flex items-end gap-2 overflow-hidden"
+                  >
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        From
+                      </label>
+                      <Input
+                        type="date"
+                        value={customFrom}
+                        onChange={(e) => setCustomFrom(e.target.value)}
+                        className="w-40"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        To
+                      </label>
+                      <Input
+                        type="date"
+                        value={customTo}
+                        onChange={(e) => setCustomTo(e.target.value)}
+                        className="w-40"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <Button
+                onClick={runSearch}
+                disabled={running}
+                className="sm:ml-auto"
+              >
+                {running ? (
+                  <>
+                    <Loader2 className="animate-spin" /> Searching the web…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw /> Run search now
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Errors */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {error}
+              </motion.div>
+            )}
           </AnimatePresence>
-        </ul>
+
+          <QueriesPanel queries={queries} onChange={refreshQueries} />
+
+          {/* Filters — narrowing the list always returns to the first page */}
+          <div
+            ref={listTopRef}
+            className="mb-4 mt-6 flex flex-wrap items-center gap-2"
+          >
+            <div className="relative flex-1 min-w-50">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search company, product, text…"
+                className="pl-9"
+              />
+            </div>
+            <Select
+              value={typeFilter}
+              onValueChange={(v) => {
+                setTypeFilter(v as SignalType | "all");
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All signal types</SelectItem>
+                {SIGNAL_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {SIGNAL_LABELS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => {
+                setStatusFilter(v as StatusFilter);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="new">New</SelectItem>
+                <SelectItem value="reviewed">Reviewed</SelectItem>
+                <SelectItem value="dismissed">Dismissed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Leads */}
+          {loading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              Loading…
+            </p>
+          ) : filtered.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              {leads.length === 0
+                ? 'No leads yet. Pick a time window and click "Run search now".'
+                : "No leads match your filters."}
+            </p>
+          ) : (
+            <>
+              <ul className="flex flex-col gap-3">
+                <AnimatePresence initial={false}>
+                  {pageData.items.map((lead) => (
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
+                      onStatus={setLeadStatus}
+                      link={crm.links[lead.id]}
+                      crmBaseUrl={crm.status?.crmBaseUrl ?? ""}
+                      busy={crm.pending.includes(lead.id)}
+                      canPush={Boolean(crm.status?.configured)}
+                      onPush={() => crm.push({ leads: [lead] })}
+                    />
+                  ))}
+                </AnimatePresence>
+              </ul>
+
+              <Pagination
+                page={pageData.page}
+                pageCount={pageData.pageCount}
+                from={pageData.from}
+                to={pageData.to}
+                total={pageData.total}
+                noun="leads"
+                onPageChange={goToPage}
+              />
+            </>
+          )}
+        </>
       )}
     </main>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+        active
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
 function LeadCard({
   lead,
   onStatus,
+  link,
+  crmBaseUrl,
+  busy,
+  canPush,
+  onPush,
 }: {
   lead: Lead;
   onStatus: (id: string, status: Lead["status"]) => void;
+  link: CrmLinks[string] | undefined;
+  crmBaseUrl: string;
+  busy: boolean;
+  canPush: boolean;
+  onPush: () => void;
 }) {
   const dimmed = lead.status === "dismissed";
+  const inCrm = Boolean(link);
   return (
     <motion.li
       layout
@@ -442,6 +609,11 @@ function LeadCard({
             </span>
             <Badge>{SIGNAL_LABELS[lead.signalType] ?? lead.signalType}</Badge>
             {lead.status === "new" && <Badge variant="success">new</Badge>}
+            {inCrm && (
+              <Badge variant="success" className="gap-1">
+                <CheckCircle2 className="h-3 w-3" /> In CRM
+              </Badge>
+            )}
             <span className="ml-auto text-xs text-muted-foreground">
               {Math.round(lead.confidence * 100)}% confidence
             </span>
@@ -472,7 +644,40 @@ function LeadCard({
             {lead.publishedAt && <span>published {lead.publishedAt}</span>}
             <span>found {new Date(lead.discoveredAt).toLocaleDateString()}</span>
 
-            <span className="ml-auto flex gap-2">
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              {inCrm ? (
+                link!.zohoId && crmBaseUrl ? (
+                  <Button variant="outline" size="xs" asChild>
+                    <a
+                      href={crmLeadUrl(crmBaseUrl, link!.zohoId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open in CRM <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </Button>
+                ) : null
+              ) : (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={onPush}
+                  disabled={busy || !canPush}
+                  title={
+                    canPush ? undefined : "Set your Zoho credentials in .env first"
+                  }
+                >
+                  {busy ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" /> Adding…
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-3 w-3" /> Add to Zoho CRM
+                    </>
+                  )}
+                </Button>
+              )}
               {lead.status !== "reviewed" && (
                 <Button
                   variant="outline"

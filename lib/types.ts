@@ -111,3 +111,49 @@ export interface RunResult {
    * these into its localStorage store and decides which are actually new. */
   leads: Lead[];
 }
+
+// ---- Directory (Vizitka.ai catalog) ----
+
+/**
+ * A business profile scraped from the Vizitka.ai catalog. Unlike a `Lead`
+ * (model-inferred from web search), these are deterministic records read from
+ * each profile's JSON-LD, so the contact details are exactly what the site
+ * publishes.
+ */
+export interface DirectoryRecord {
+  /** Stable id: the profile's numeric id on vizitka.ai, e.g. "vizitka-3". */
+  id: string;
+  /** Canonical profile URL on vizitka.ai. */
+  detailUrl: string;
+  /** Headline of the profile — usually the service offered, not the company. */
+  title: string;
+  /** Legal/company name (JSON-LD legalName, falling back to name). */
+  company: string;
+  description: string;
+  email?: string;
+  /** Normalized to +420 xxx xxx xxx where possible. */
+  phone?: string;
+  website?: string;
+  /** Street/locality from the profile's PostalAddress. */
+  address?: string;
+  /** ISO-2 country code from the profile's PostalAddress, e.g. "CZ". */
+  country?: string;
+  /** Region the business serves, e.g. "Celá ČR" or "Praha". */
+  areaServed?: string;
+  logo?: string;
+  /** Named services from the profile's makesOffer list. */
+  services: string[];
+  /** When this record was scraped. */
+  fetchedAt: string;
+}
+
+/** Outcome of pushing one record/lead into Zoho CRM. */
+export interface ZohoPushResult {
+  /** Our local id for the thing we pushed (DirectoryRecord.id or Lead.id). */
+  id: string;
+  status: "created" | "duplicate" | "error";
+  /** Zoho's record id when created. */
+  zohoId?: string;
+  /** Zoho's message, or the local error. */
+  message: string;
+}
